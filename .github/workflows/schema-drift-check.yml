@@ -72,4 +72,4 @@ jobs:
             --base main \
             --head "$BRANCH")
 
-          gh pr merge "$PR_URL" --squash --auto
+          gh pr merge "$PR_URL" --squash --delete-branch
