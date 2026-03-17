@@ -26,7 +26,7 @@ public class StudentRecordMapper : IMapper<ExternalStudentRecord, StudentEnrollm
             CourseCode = courseCode,             // extracted from combined Course field
             CourseTitle = courseTitle,           // extracted from combined Course field
             EnrolledOn = DateOnly.Parse(source.EnrollmentDate, CultureInfo.InvariantCulture),
-            Grade = source.Grade,               // numeric grade, passed through
+            Grade = int.Parse(source.Grade, CultureInfo.InvariantCulture), // external grade is now a string — parse to int
             Age = null                          // not provided by external source
         };
     }
