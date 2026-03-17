@@ -2,6 +2,8 @@ name: Fix Mapping (Claude Code)
 
 on:
   push:
+    branches:
+      - main
     paths:
       - 'SchemaReferences/*.schema.json'
 
@@ -58,17 +60,9 @@ jobs:
             echo "  Contract model: $CONTRACT_MODEL (must not change)"
 
             # Run Claude Code with a scoped prompt for this specific endpoint
-            npx @anthropic-ai/claude-code --print \
-              --allowedTools "Edit,Read,Glob,Grep" \
-              "The external API schema has changed. The new schema is in $SCHEMA_PATH.
+            PROMPT="The external API schema has changed. The new schema is in ${SCHEMA_PATH}. Your task — scoped to this single endpoint: 1. Read the new schema in ${SCHEMA_PATH} 2. Update the external model at ${EXTERNAL_MODEL} to match the new schema 3. Update the mapper at ${MAPPER} so it correctly maps from the updated external model to the contract model 4. The contract model at ${CONTRACT_MODEL} is the fixed contract — do NOT modify it. Only modify ${EXTERNAL_MODEL} and ${MAPPER}. Do not touch any other files."
 
-              Your task — scoped to this single endpoint:
-              1. Read the new schema in $SCHEMA_PATH
-              2. Update the external model at $EXTERNAL_MODEL to match the new schema
-              3. Update the mapper at $MAPPER so it correctly maps from the updated external model to the contract model
-              4. The contract model at $CONTRACT_MODEL is the fixed contract — do NOT modify it
-
-              Only modify $EXTERNAL_MODEL and $MAPPER. Do not touch any other files."
+            echo "$PROMPT" | npx @anthropic-ai/claude-code --print --allowedTools "Edit,Read,Glob,Grep"
           done
 
       - name: Create pull request
