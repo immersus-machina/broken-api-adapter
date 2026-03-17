@@ -7,6 +7,7 @@ on:
 
 permissions:
   contents: write
+  pull-requests: write
 
 jobs:
   check-drift:
@@ -52,8 +53,10 @@ jobs:
 
           echo "drift_detected=$DRIFT_DETECTED" >> "$GITHUB_OUTPUT"
 
-      - name: Commit and push updated schemas
+      - name: Commit, push, create PR and merge
         if: steps.drift.outputs.drift_detected == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           BRANCH="schema-drift/$(date +%Y%m%d-%H%M%S)"
           git config user.name "github-actions[bot]"
@@ -62,3 +65,11 @@ jobs:
           git add SchemaReferences/*.schema.json
           git commit -m "chore: update schema references — drift detected"
           git push origin "$BRANCH"
+
+          PR_URL=$(gh pr create \
+            --title "chore: update schema references — drift detected" \
+            --body "Automated schema drift detection found changes in the external API response structure." \
+            --base main \
+            --head "$BRANCH")
+
+          gh pr merge "$PR_URL" --squash --auto
