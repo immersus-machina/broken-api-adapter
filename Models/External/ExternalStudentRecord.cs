@@ -10,5 +10,5 @@ public record ExternalStudentRecord
     public string Name { get; init; } = string.Empty;
     public string Course { get; init; } = string.Empty;
     public string EnrollmentDate { get; init; } = string.Empty;
-    public int Grade { get; init; }
+    public string Grade { get; init; } = string.Empty;
 }
