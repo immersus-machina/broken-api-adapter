@@ -66,10 +66,11 @@ jobs:
           git commit -m "chore: update schema references — drift detected"
           git push origin "$BRANCH"
 
-          PR_URL=$(gh pr create \
+          gh pr create \
             --title "chore: update schema references — drift detected" \
             --body "Automated schema drift detection found changes in the external API response structure." \
             --base main \
-            --head "$BRANCH")
+            --head "$BRANCH"
 
-          gh pr merge "$PR_URL" --squash --delete-branch
+          git checkout main
+          gh pr merge "$BRANCH" --squash --delete-branch
