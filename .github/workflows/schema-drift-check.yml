@@ -1,0 +1,64 @@
+name: Schema Drift Check
+
+on:
+  schedule:
+    - cron: '0 6 * * *' # Daily at 06:00 UTC
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+
+jobs:
+  check-drift:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install jq
+        run: sudo apt-get install -y jq
+
+      - name: Check for schema drift
+        id: drift
+        run: |
+          DRIFT_DETECTED=false
+
+          # Iterate over each entry in the manifest
+          for row in $(jq -c '.[]' SchemaReferences/manifest.json); do
+            SCHEMA_FILE=$(echo "$row" | jq -r '.schema')
+            URL=$(echo "$row" | jq -r '.url')
+            SCHEMA_PATH="SchemaReferences/${SCHEMA_FILE}"
+
+            echo "Checking $SCHEMA_FILE against $URL"
+
+            # Extract current schema from the live endpoint
+            LIVE_SCHEMA=$(bash .github/scripts/extract-schema.sh "$URL")
+
+            if [ $? -ne 0 ] || [ -z "$LIVE_SCHEMA" ]; then
+              echo "::warning::Failed to fetch schema from $URL — skipping"
+              continue
+            fi
+
+            # Compare with stored reference
+            STORED_SCHEMA=$(cat "$SCHEMA_PATH")
+
+            if [ "$LIVE_SCHEMA" != "$STORED_SCHEMA" ]; then
+              echo "Drift detected for $SCHEMA_FILE"
+              echo "$LIVE_SCHEMA" > "$SCHEMA_PATH"
+              DRIFT_DETECTED=true
+            else
+              echo "No drift for $SCHEMA_FILE"
+            fi
+          done
+
+          echo "drift_detected=$DRIFT_DETECTED" >> "$GITHUB_OUTPUT"
+
+      - name: Commit and push updated schemas
+        if: steps.drift.outputs.drift_detected == 'true'
+        run: |
+          BRANCH="schema-drift/$(date +%Y%m%d-%H%M%S)"
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git checkout -b "$BRANCH"
+          git add SchemaReferences/*.schema.json
+          git commit -m "chore: update schema references — drift detected"
+          git push origin "$BRANCH"

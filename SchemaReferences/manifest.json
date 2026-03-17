@@ -1,0 +1,9 @@
+[
+  {
+    "schema": "external-student-record.schema.json",
+    "url": "https://red-tree-0d0d99603.6.azurestaticapps.net/data.json",
+    "externalModel": "Models/External/ExternalStudentRecord.cs",
+    "mapper": "Mapping/StudentRecordMapper.cs",
+    "contractModel": "Models/Contract/StudentEnrollment.cs"
+  }
+]

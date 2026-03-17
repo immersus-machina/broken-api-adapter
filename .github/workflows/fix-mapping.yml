@@ -1,0 +1,107 @@
+name: Fix Mapping (Claude Code)
+
+on:
+  push:
+    paths:
+      - 'SchemaReferences/*.schema.json'
+
+permissions:
+  contents: write
+  pull-requests: write
+  issues: write
+
+jobs:
+  fix-mapping:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 2 # Need previous commit to detect which schemas changed
+
+      - name: Detect changed schemas
+        id: changed
+        run: |
+          CHANGED=$(git diff --name-only HEAD~1 HEAD -- 'SchemaReferences/*.schema.json' | grep -v manifest.json || true)
+          echo "files<<EOF" >> "$GITHUB_OUTPUT"
+          echo "$CHANGED" >> "$GITHUB_OUTPUT"
+          echo "EOF" >> "$GITHUB_OUTPUT"
+
+      - name: Fix mapping for each changed schema
+        if: steps.changed.outputs.files != ''
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: |
+          # Process each changed schema file individually
+          echo "${{ steps.changed.outputs.files }}" | while IFS= read -r SCHEMA_PATH; do
+            [ -z "$SCHEMA_PATH" ] && continue
+
+            SCHEMA_FILE=$(basename "$SCHEMA_PATH")
+            echo "Processing drift in $SCHEMA_FILE"
+
+            # Look up the manifest entry for this schema
+            ENTRY=$(jq -c --arg s "$SCHEMA_FILE" '.[] | select(.schema == $s)' SchemaReferences/manifest.json)
+
+            if [ -z "$ENTRY" ]; then
+              echo "::warning::No manifest entry found for $SCHEMA_FILE — skipping"
+              continue
+            fi
+
+            EXTERNAL_MODEL=$(echo "$ENTRY" | jq -r '.externalModel')
+            MAPPER=$(echo "$ENTRY" | jq -r '.mapper')
+            CONTRACT_MODEL=$(echo "$ENTRY" | jq -r '.contractModel')
+
+            echo "  External model: $EXTERNAL_MODEL"
+            echo "  Mapper: $MAPPER"
+            echo "  Contract model: $CONTRACT_MODEL (must not change)"
+
+            # Run Claude Code with a scoped prompt for this specific endpoint
+            npx @anthropic-ai/claude-code --print \
+              --allowedTools "Edit,Read,Glob,Grep" \
+              "The external API schema has changed. The new schema is in $SCHEMA_PATH.
+
+              Your task — scoped to this single endpoint:
+              1. Read the new schema in $SCHEMA_PATH
+              2. Update the external model at $EXTERNAL_MODEL to match the new schema
+              3. Update the mapper at $MAPPER so it correctly maps from the updated external model to the contract model
+              4. The contract model at $CONTRACT_MODEL is the fixed contract — do NOT modify it
+
+              Only modify $EXTERNAL_MODEL and $MAPPER. Do not touch any other files."
+          done
+
+      - name: Create pull request
+        if: steps.changed.outputs.files != ''
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          # Check if Claude made any changes
+          if git diff --quiet; then
+            echo "No changes made by Claude — nothing to PR"
+            exit 0
+          fi
+
+          BRANCH="fix-mapping/$(date +%Y%m%d-%H%M%S)"
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git checkout -b "$BRANCH"
+          git add -A
+          git commit -m "fix: update external models and mappers for schema drift"
+          git push origin "$BRANCH"
+
+          CHANGED_SCHEMAS="${{ steps.changed.outputs.files }}"
+
+          gh pr create \
+            --title "fix: update mappings for schema drift" \
+            --body "$(cat <<EOF
+          ## Schema Drift Detected
+
+          The following schema references changed:
+          \`\`\`
+          $CHANGED_SCHEMAS
+          \`\`\`
+
+          Claude Code has updated the corresponding external models and mappers.
+          **The contract models were not modified.**
+
+          Please review the mapping logic carefully before merging.
+          EOF
+          )"

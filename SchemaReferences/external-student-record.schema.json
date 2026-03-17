@@ -1,0 +1,26 @@
+{
+  "properties": {
+    "course": {
+      "type": "string"
+    },
+    "enrollmentDate": {
+      "type": "string"
+    },
+    "grade": {
+      "type": "number"
+    },
+    "name": {
+      "type": "string"
+    },
+    "studentId": {
+      "type": "string"
+    }
+  },
+  "propertyNames": [
+    "course",
+    "enrollmentDate",
+    "grade",
+    "name",
+    "studentId"
+  ]
+}
